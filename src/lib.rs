@@ -40,12 +40,12 @@ static GLOBAL_LOCK: AtomicLock = AtomicLock::new();
 
 fn print_digit(val: u8) {
     let val = val & 0xF;
-    unsafe { libc::write(1, (&(if val < 10 { b'0' + val } else { b'a' + val - 10 }) as *const u8).cast(), 1); }
+    unsafe { libc::write(libc::STDOUT_FILENO, (&(if val < 10 { b'0' + val } else { b'a' + val - 10 }) as *const u8).cast(), 1); }
         
 }
 fn print(v: &str, val: usize) {
     unsafe {
-        libc::write(1, v.as_bytes().as_ptr().cast(), v.as_bytes().len());
+        libc::write(libc::STDOUT_FILENO, v.as_bytes().as_ptr().cast(), v.as_bytes().len());
     }
 
     for b in &(val as u64).to_be_bytes() {
@@ -59,7 +59,7 @@ fn print_ptrs(v: &str, size: usize, ptr: usize) {
     print(v, size);
     print(" ", ptr);
     unsafe {
-        libc::write(1, (&b'\n' as *const u8).cast(), 1);
+        libc::write(libc::STDOUT_FILENO, (&b'\n' as *const u8).cast(), 1);
     }
 }
 
@@ -105,7 +105,7 @@ pub extern fn free(ptr: *mut ffi::c_void) {
     }
 }
 
-// Overriden by panic in vmap :(
+// Overriden by panic in vmap or its dependency :(
 // #[panic_handler]
 // fn dont_panic(_info: &core::panic::PanicInfo) -> ! {
 //     unsafe { libc::exit(42) }
