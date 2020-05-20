@@ -79,6 +79,12 @@ pub extern  fn malloc(size: libc::size_t) -> *mut ffi::c_void {
         },
         Err(_) => {
             print_ptrs("malloc null ", size, 0);
+            unsafe {
+                // Glibc expects malloc to set errno on any failure
+                // (i.e. when null pointer is returned).  Reference:
+                // https://linux.die.net/man/3/malloc, Notes section.
+                *libc::__errno_location() = libc::ENOMEM;
+            }
             ptr::null_mut()
         }
     }
