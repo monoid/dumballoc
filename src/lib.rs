@@ -90,6 +90,89 @@ pub extern  fn malloc(size: libc::size_t) -> *mut ffi::c_void {
     }
 }
 
+// calloc -- allocates num records of size size and fills with zero.
+// This is more or less working funciton that calls malloc.
+#[no_mangle]
+pub extern fn calloc(num: libc::size_t, size: libc::size_t) -> *mut ffi::c_void {
+    let mem_size = match num.checked_mul(size) {
+        Some(n) => n,
+        None => {
+            // "calloc returns a error"
+            unsafe {
+                // Glibc expects malloc/calloc to set errno on any
+                // failure.  Reference: Notes section of
+                // https://linux.die.net/man/3/malloc,
+                *libc::__errno_location() = libc::ENOMEM;
+            }
+            return ptr::null_mut();
+        }
+    };
+
+    let mem = malloc(mem_size);
+    if mem != ptr::null_mut() {
+        unsafe { ptr::write_bytes(mem, 0, mem_size) };
+    }
+    return mem;
+}
+
+// Helper function for realloc that gets allocation size from it
+// header.  This noop implementation is never called in proper code
+// because malloc never returns a valid pointer.  In real
+// implementation, a function that unpacks memory header is to be
+// used.
+#[inline]
+unsafe fn get_region_size_by_ptr(ptr: *mut ffi::c_void) -> libc::size_t {
+    let base_ptr = ptr.sub(HEADER_SIZE);
+    // TODO: use libc::size_t for header.
+    let size: usize = *base_ptr.cast();
+    return size as libc::size_t;
+}
+
+// Primitive version of realloc that always reallocate
+#[no_mangle]
+pub extern fn realloc(ptr: *mut ffi::c_void, size: libc::size_t) -> *mut ffi::c_void {
+    if size == 0 {
+        // Linux man page is somewhat contradictory for calloc(..., 0):
+        //
+        // ... if size is equal to zero, and ptr is not NULL, then the
+        // call is equivalent to free(ptr) ... If size was equal to 0,
+        // either NULL or a pointer suitable to be passed to free() is
+        // returned.
+        free(ptr);
+        unsafe {
+            *libc::__errno_location() = libc::ENOMEM;
+        }
+        return ptr::null_mut();
+    }
+    if ptr == ptr::null_mut() {
+        // Again, special case in man malloc.
+        return malloc(size);
+    }
+
+    let orig_size = unsafe { get_region_size_by_ptr(ptr) };
+
+    if orig_size == size {
+        // The Easiest part.
+        return ptr;
+    }
+    // else
+
+    // We cannot really realloc in generic implementation, so just
+    // alloc new memory.
+    let new_mem = malloc(size);
+    if new_mem == ptr::null_mut() {
+        // errno is set by malloc
+        return new_mem;
+    }
+    // else
+
+    unsafe {
+        ptr::copy_nonoverlapping(ptr, new_mem, core::cmp::min(orig_size, size))
+    };
+    free(ptr);
+    return new_mem;
+}
+
 #[no_mangle]
 pub extern fn free(ptr: *mut ffi::c_void) {
 
